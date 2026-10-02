@@ -19,21 +19,22 @@ import com.task2.portal.exception.ResourceNotFoundException;
 import com.task2.portal.repo.CustomerRepo;
 import com.task2.portal.repo.OrderRepo;
 import com.task2.portal.security.SecurityUtils;
+import com.task2.portal.webhook.OrderStatusChangedEvent;
+import com.task2.portal.webhook.WebhookService;
 
 import org.springframework.transaction.annotation.Transactional;
 
 import org.springframework.data.domain.*;
 import jakarta.persistence.criteria.Predicate;
-
 @Service 
 public class OrderService {
     private final OrderRepo orderRepository;
     private final CustomerRepo customerRepository;
-   
-    public OrderService(OrderRepo orderRepository, CustomerRepo customerRepository) {
+    private final WebhookService webhookService;
+    public OrderService(OrderRepo orderRepository, CustomerRepo customerRepository,WebhookService webhookService) {
         this.orderRepository = orderRepository;
         this.customerRepository = customerRepository;
-  
+        this.webhookService = webhookService;
     }
     
     @Transactional (readOnly = true)
@@ -90,7 +91,10 @@ public class OrderService {
         order.update(request.items(), request.status(), request.priority(), request.total());
         OrderEntity saved = orderRepository.save(order);
 
-
+        if (previousStatus != saved.getStatus()) {
+            webhookService.publishStatusChanged(new OrderStatusChangedEvent(
+                    saved.getId(), previousStatus, saved.getStatus(), java.time.Instant.now()));
+        }
         return toResponse(saved);
     }
 

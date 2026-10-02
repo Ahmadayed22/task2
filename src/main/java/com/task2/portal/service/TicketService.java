@@ -17,15 +17,17 @@ import com.task2.portal.exception.ResourceNotFoundException;
 import com.task2.portal.repo.CustomerRepo;
 import com.task2.portal.repo.TicketRepo;
 import com.task2.portal.security.SecurityUtils;
+import com.task2.portal.websocket.TicketUpdateMessage;
 @Service
 public class TicketService {
     private final TicketRepo ticketRepository;
     private final CustomerRepo customerRepository;
-
-    public TicketService(TicketRepo ticketRepository, CustomerRepo customerRepository) {
+    private final SimpMessagingTemplate messagingTemplate;
+   
+    public TicketService(TicketRepo ticketRepository, CustomerRepo customerRepository , SimpMessagingTemplate messagingTemplate) {
         this.ticketRepository = ticketRepository;
         this.customerRepository = customerRepository;
-        
+        this.messagingTemplate = messagingTemplate;
     }
 
     @Transactional(readOnly = true)
@@ -78,7 +80,9 @@ public class TicketService {
         boolean statusChanged = ticket.getStatus() != request.status();
         ticket.update(request.subject().trim(), request.status(), request.priority());
         Ticket saved = ticketRepository.save(ticket);
- 
+        if (statusChanged) {
+            broadcast(saved);
+        }
         return toResponse(saved);
     }
 
@@ -94,7 +98,7 @@ public class TicketService {
 
     private TicketResponse saveNewTicket(Customer customer, TicketRequest request) {
         Ticket saved = ticketRepository.save(new Ticket(customer, request.subject().trim(), request.status(), request.priority()));
-  
+        broadcast(saved);
         return toResponse(saved);
     }
 
@@ -103,7 +107,16 @@ public class TicketService {
                 .orElseThrow(() -> new ResourceNotFoundException("Customer " + customerId + " was not found"));
     }
 
-
+    private void broadcast(Ticket ticket) {
+        messagingTemplate.convertAndSend("/topic/tickets", new TicketUpdateMessage(
+                ticket.getId(),
+                ticket.getCustomer().getId(),
+                ticket.getSubject(),
+                ticket.getStatus(),
+                ticket.getPriority(),
+                ticket.getUpdatedAt()
+        ));
+    }
 
     private void validatePage(int page, int size) {
         if (page < 0) throw new BadRequestException("page must be zero or greater");
@@ -123,3 +136,4 @@ public class TicketService {
         return new TicketResponse(ticket.getId(), ticket.getCustomer().getId(), ticket.getSubject(), ticket.getStatus(), ticket.getPriority(), ticket.getCreatedAt(), ticket.getUpdatedAt());
     }
 }
+

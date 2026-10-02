@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Digitinary Ticket WebSocket Demo</title>
+    <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1.6.1/dist/sockjs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@stomp/stompjs@7.0.0/bundles/stomp.umd.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 900px;
+            margin: 40px auto;
+            padding: 0 20px;
+        }
+
+        button {
+            padding: 8px 14px;
+            cursor: pointer;
+        }
+
+        #status {
+            margin: 12px 0;
+            font-weight: bold;
+        }
+
+        #events {
+            background: #111827;
+            color: #f9fafb;
+            padding: 16px;
+            min-height: 240px;
+            white-space: pre-wrap;
+            border-radius: 8px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Digitinary Ticket WebSocket Demo</h1>
+    <p>This page connects to <code>/ws</code> using STOMP + SockJS and subscribes to <code>/topic/tickets</code>.</p>
+    <button id="connect">Connect</button>
+    <button id="disconnect" disabled>Disconnect</button>
+    <div id="status">Disconnected</div>
+    <h2>Live updates</h2>
+    <div id="events">No events received yet.</div>
+
+    <script>
+        const statusEl = document.getElementById('status');
+        const eventsEl = document.getElementById('events');
+        const connectButton = document.getElementById('connect');
+        const disconnectButton = document.getElementById('disconnect');
+        let client;
+
+        function appendEvent(body) {
+            if (eventsEl.textContent === 'No events received yet.') eventsEl.textContent = '';
+            eventsEl.textContent += body + '\n\n';
+        }
+
+        connectButton.onclick = () => {
+            client = new StompJs.Client({
+                webSocketFactory: () => new SockJS('/ws'),
+                reconnectDelay: 5000,
+                debug: () => { }
+            });
+
+            client.onConnect = () => {
+                statusEl.textContent = 'Connected and subscribed to /topic/tickets';
+                connectButton.disabled = true;
+                disconnectButton.disabled = false;
+                client.subscribe('/topic/tickets', message => appendEvent(message.body));
+            };
+
+            client.onWebSocketError = error => {
+                statusEl.textContent = 'WebSocket error: ' + error;
+            };
+
+            client.onStompError = frame => {
+                statusEl.textContent = 'STOMP error: ' + frame.headers['message'];
+            };
+
+            client.activate();
+        };
+
+        disconnectButton.onclick = () => {
+            if (client) client.deactivate();
+            statusEl.textContent = 'Disconnected';
+            connectButton.disabled = false;
+            disconnectButton.disabled = true;
+        };
+    </script>
+</body>
+
+</html>
