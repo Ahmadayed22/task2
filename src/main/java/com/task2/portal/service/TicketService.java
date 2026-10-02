@@ -12,24 +12,25 @@ import com.task2.portal.entity.Ticket;
 import com.task2.portal.enums.Priority;
 import com.task2.portal.enums.TicketStatus;
 import com.task2.portal.exception.BadRequestException;
+import com.task2.portal.exception.ForbiddenException;
 import com.task2.portal.exception.ResourceNotFoundException;
 import com.task2.portal.repo.CustomerRepo;
 import com.task2.portal.repo.TicketRepo;
+import com.task2.portal.security.SecurityUtils;
 @Service
 public class TicketService {
     private final TicketRepo ticketRepository;
     private final CustomerRepo customerRepository;
 
-
     public TicketService(TicketRepo ticketRepository, CustomerRepo customerRepository) {
         this.ticketRepository = ticketRepository;
         this.customerRepository = customerRepository;
-       
+        
     }
 
     @Transactional(readOnly = true)
     public PageResponse<TicketResponse> findCustomerTickets(Long customerId, String status, String priority, int page, int size) {
-        
+        SecurityUtils.requireCustomerAccess(customerId);
         validatePage(page, size);
         TicketStatus ticketStatus = parseEnum(status, TicketStatus.class, "status");
         Priority ticketPriority = parseEnum(priority, Priority.class, "priority");
@@ -51,7 +52,7 @@ public class TicketService {
 
     @Transactional(readOnly = true)
     public TicketResponse findById(Long customerId, Long ticketId) {
-       
+        SecurityUtils.requireCustomerAccess(customerId);
         Ticket ticket = ticketRepository.findByIdAndCustomerId(ticketId, customerId)
                 .orElseThrow(() -> new ResourceNotFoundException("Ticket " + ticketId + " was not found for customer " + customerId));
         return toResponse(ticket);
@@ -59,30 +60,33 @@ public class TicketService {
 
     @Transactional
     public TicketResponse create(Long customerId, TicketRequest request) {
-        if (true) {
-         Customer customer = getCustomer(customerId);
+        if (SecurityUtils.isAdmin()) {
+            Customer customer = getCustomer(customerId);
             return saveNewTicket(customer, request);
-       }
-
+        }
+        SecurityUtils.requireCustomerAccess(customerId);
         Customer customer = getCustomer(customerId);
         return saveNewTicket(customer, request);
+     
     }
 
     @Transactional
     public TicketResponse update(Long customerId, Long ticketId, TicketRequest request) {
-     
+        SecurityUtils.requireCustomerAccess(customerId);
         Ticket ticket = ticketRepository.findByIdAndCustomerId(ticketId, customerId)
                 .orElseThrow(() -> new ResourceNotFoundException("Ticket " + ticketId + " was not found for customer " + customerId));
         boolean statusChanged = ticket.getStatus() != request.status();
         ticket.update(request.subject().trim(), request.status(), request.priority());
         Ticket saved = ticketRepository.save(ticket);
-    
+ 
         return toResponse(saved);
     }
 
     @Transactional
     public void delete(Long customerId, Long ticketId) {
-
+        if (!SecurityUtils.isAdmin()) {
+            throw new ForbiddenException("Only ADMIN users can delete tickets");
+        }
         Ticket ticket = ticketRepository.findByIdAndCustomerId(ticketId, customerId)
                 .orElseThrow(() -> new ResourceNotFoundException("Ticket " + ticketId + " was not found for customer " + customerId));
         ticketRepository.delete(ticket);

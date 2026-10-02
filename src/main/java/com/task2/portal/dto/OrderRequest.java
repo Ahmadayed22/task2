@@ -15,7 +15,7 @@ public record OrderRequest(
         @NotEmpty(message = "items must contain at least one item")
         @Size(max = 50, message = "items must contain at most 50 entries")
         List<@Valid @NotNull @Size(min = 1, max = 200, message = "each item must be 1-200 characters") String> items,
-
+                        
         @NotNull(message = "status is required")
         OrderStatus status,
 

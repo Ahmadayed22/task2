@@ -14,9 +14,12 @@ import com.task2.portal.entity.OrderEntity;
 import com.task2.portal.enums.OrderStatus;
 import com.task2.portal.enums.Priority;
 import com.task2.portal.exception.BadRequestException;
+import com.task2.portal.exception.ForbiddenException;
 import com.task2.portal.exception.ResourceNotFoundException;
 import com.task2.portal.repo.CustomerRepo;
 import com.task2.portal.repo.OrderRepo;
+import com.task2.portal.security.SecurityUtils;
+
 import org.springframework.transaction.annotation.Transactional;
 
 import org.springframework.data.domain.*;
@@ -26,17 +29,17 @@ import jakarta.persistence.criteria.Predicate;
 public class OrderService {
     private final OrderRepo orderRepository;
     private final CustomerRepo customerRepository;
-
+   
     public OrderService(OrderRepo orderRepository, CustomerRepo customerRepository) {
         this.orderRepository = orderRepository;
         this.customerRepository = customerRepository;
-   
+  
     }
     
     @Transactional (readOnly = true)
     public PageResponse<OrderResponse> findCustomerOrders(Long customerId, String status,
             String sort, int page, int size, String priority) {
-      
+        SecurityUtils.requireCustomerAccess(customerId);
         validatePage(page, size);
         OrderStatus orderStatus = parseEnum(status, OrderStatus.class, "status");
         Priority orderPriority = parseEnum(priority, Priority.class, "priority");
@@ -58,7 +61,7 @@ public class OrderService {
 
     @Transactional(readOnly = true)
     public OrderResponse findById(Long customerId, Long orderId) {
-      
+        SecurityUtils.requireCustomerAccess(customerId);
         return toResponse(orderRepository.findByIdAndCustomerId(orderId, customerId)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Order " + orderId + " was not found for customer " + customerId)));
@@ -66,9 +69,12 @@ public class OrderService {
 
     @Transactional
     public OrderResponse create(Long customerId, OrderRequest request) {
-
+        if (!SecurityUtils.isAdmin()) {
+            throw new ForbiddenException("Only ADMIN users can create orders");
+        }
         Customer customer = customerRepository.findById(customerId)
-                .orElseThrow(() -> new ResourceNotFoundException("Customer " + customerId + " was not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Customer " + customerId
+                 + " was not found"));
         OrderEntity order = new OrderEntity(customer, request.items(), request.status(),
                 request.priority(), request.total());
         return toResponse(orderRepository.save(order));
@@ -76,7 +82,7 @@ public class OrderService {
 
     @Transactional
     public OrderResponse update(Long customerId, Long orderId, OrderRequest request) {
-  
+        SecurityUtils.requireCustomerAccess(customerId);
         OrderEntity order = orderRepository.findByIdAndCustomerId(orderId, customerId)
                 .orElseThrow(() -> new ResourceNotFoundException("Order " + orderId + " was not found for customer " + customerId));
 
@@ -91,7 +97,9 @@ public class OrderService {
 
     @Transactional
     public void delete(Long customerId, Long orderId) {
- 
+        if (!SecurityUtils.isAdmin()) {
+            throw new ForbiddenException("Only ADMIN users can delete orders");
+        }
         OrderEntity order = orderRepository.findByIdAndCustomerId(orderId, customerId)
                 .orElseThrow(() -> new ResourceNotFoundException("Order " + orderId + " was not found for customer " + customerId));
         orderRepository.delete(order);
